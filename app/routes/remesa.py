@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from app.db.database import SessionLocal
 from app.models import Transaction
 from app.services.exchange import get_usd_to_gtq_rate
+from app.core.deps import get_current_user
 
 router = APIRouter(prefix="/remesa", tags=["Remesas"])
 
@@ -13,10 +14,20 @@ def get_db():
     finally:
         db.close()
 
-# 💸 Enviar dinero (HIJO)
+# Enviar dinero (HIJO)
 @router.post("/send")
-def send_money(sender_id: int, receiver_id: int, amount_usd: float, db: Session = Depends(get_db)):
-    
+def send_money(
+    sender_id: int,
+    receiver_id: int,
+    amount_usd: float,
+    db: Session = Depends(get_db),
+    user = Depends(get_current_user)
+):
+
+    # validación de rol
+    if user["role"] != "HIJO":
+        raise HTTPException(status_code=403, detail="No autorizado")
+
     rate = get_usd_to_gtq_rate()
     amount_gtq = amount_usd * rate
 
@@ -35,10 +46,20 @@ def send_money(sender_id: int, receiver_id: int, amount_usd: float, db: Session 
     return transaction
 
 
-# 🙋 Solicitud de dinero (RECEPTOR)
+# Solicitud de dinero (RECEPTOR)
 @router.post("/request")
-def request_money(sender_id: int, receiver_id: int, amount_gtq: float, db: Session = Depends(get_db)):
-    
+def request_money(
+    sender_id: int,
+    receiver_id: int,
+    amount_gtq: float,
+    db: Session = Depends(get_db),
+    user = Depends(get_current_user)
+):
+
+    #validación de rol
+    if user["role"] != "RECEPTOR":
+        raise HTTPException(status_code=403, detail="No autorizado")
+
     rate = get_usd_to_gtq_rate()
     amount_usd = amount_gtq / rate
 
@@ -57,10 +78,15 @@ def request_money(sender_id: int, receiver_id: int, amount_gtq: float, db: Sessi
     return transaction
 
 
-# 📄 Listado con paginación
+# Listado con paginación
 @router.get("/")
-def get_transactions(page: int = 1, limit: int = 10, db: Session = Depends(get_db)):
-    
+def get_transactions(
+    page: int = 1,
+    limit: int = 10,
+    db: Session = Depends(get_db),
+    user = Depends(get_current_user)
+):
+
     offset = (page - 1) * limit
 
     transactions = db.query(Transaction).offset(offset).limit(limit).all()
